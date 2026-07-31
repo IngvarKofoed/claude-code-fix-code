@@ -253,17 +253,28 @@ lens (by subsystem, not alphabetically) and pass them in. The script owns the
 schemas, the models, the refutation prompt, the gap sweep, and the budget guard.
 
 **Show the plan before spawning anything** — where *show* means the header line
-and the table appear in **your own message**, inside a fenced code block, before
-the Workflow call. Write the slices to a scratch file and run the planner:
+and the table appear in **your own message**, before the Workflow call. Write the
+slices to a scratch file and run the planner:
 
 ```bash
 python3 $FC/plan.py --triage $T/triage.json --slices $T/slices.json
 ```
 
-Then paste its header line and table into your reply verbatim. **The script's
-stdout is not the user's screen.** Bash output is shown to *you*; the user gets a
-collapsed panel at best, so a table that exists only in a tool result has not been
-shown, and *"the plan is above"* points at nothing. The records bear this out: the
+Then paste its header line and table into your reply verbatim — **as a bare
+markdown table, never wrapped in a code fence.** The host renders GFM, so an
+unfenced table arrives as a table and a fenced one arrives as a screenful of
+pipes, which is the same failure as not showing it: the user still has to parse
+raw output. The example below is fenced only because this document has to display
+the markup rather than render it. The finding blocks in phase 6 are the opposite
+case — their meaning lives in the indentation, which the renderer eats — so those
+*do* get a fence. **Markup the host renders goes bare; layout it would destroy goes
+in a fence.**
+
+**The script's stdout is not the user's screen** either. Bash output is shown to
+*you*; the user gets a collapsed panel at best, so a table that exists only in a
+tool result has not been shown, and *"the plan is above"* points at nothing — a
+sentence that has been written about a table nobody could see. The records bear
+this out: the
 table was lost in three of five L-tier runs on file, and the split was exactly
 *who invoked the skill* — both user-typed `/fix-code` runs printed it, and all
 three that a CLAUDE.md commit-gate rule invoked mid-flow did not. That's the

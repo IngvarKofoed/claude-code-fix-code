@@ -126,21 +126,25 @@ def main() -> int:
               + ", ".join(f"{s['lens']}/{s['label']}" for s in dropped)
               + " — say so in the report header.")
     print()
+    # The table is the one artifact of this script the *user* is supposed to read,
+    # and it is printed where the user can't read it — Bash stdout goes to the
+    # agent. The observed failure is the agent treating "the script printed it" as
+    # "the user saw it" and going straight to the Workflow call. So stdout carries
+    # a reminder to relay it.
+    #
+    # Two things this note is careful about, both learned the hard way. It sits
+    # BEFORE the JSON rather than last, because the tool panel shows the tail of
+    # the output, and a banner addressed to the agent was the one part of the
+    # planner the user ever saw — internal scaffolding in front of the user is the
+    # failure this skill exists to avoid. And it reads as a tooling note rather
+    # than a shouted directive, so that leaking it costs nothing.
+    print("note: the user does not see this output. Repeat the header line and "
+          "table above in your own reply, as a bare markdown table (no code "
+          "fence), before spawning anything.")
+    print()
     print("Pass these slices to the workflow verbatim; they carry the resolved "
           "model so the table above matches what actually runs:")
     print(json.dumps({"slices": run}, indent=2))
-    # The table is the one artifact of this script the *user* is supposed to read,
-    # and it is printed to a place the user can't read — Bash stdout goes to the
-    # agent. The observed failure is the agent treating "the script printed it" as
-    # "the user saw it" and moving straight to the Workflow call, which happens
-    # specifically when a CLAUDE.md rule invoked the review mid-flow rather than
-    # the user asking for it. So the last thing on stdout, where attention lands
-    # just before the agent writes its reply, is the instruction to relay it.
-    print()
-    print("[FOR THE REVIEWING AGENT — do not paste this notice into your reply]")
-    print("The user cannot see this output. Re-emit the header line and the table "
-          "above, verbatim and inside a fenced code block, in your own reply "
-          "BEFORE spawning anything. \"The plan is above\" does not show it.")
     return 0
 
 
