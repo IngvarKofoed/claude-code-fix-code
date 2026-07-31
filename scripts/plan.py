@@ -129,6 +129,18 @@ def main() -> int:
     print("Pass these slices to the workflow verbatim; they carry the resolved "
           "model so the table above matches what actually runs:")
     print(json.dumps({"slices": run}, indent=2))
+    # The table is the one artifact of this script the *user* is supposed to read,
+    # and it is printed to a place the user can't read — Bash stdout goes to the
+    # agent. The observed failure is the agent treating "the script printed it" as
+    # "the user saw it" and moving straight to the Workflow call, which happens
+    # specifically when a CLAUDE.md rule invoked the review mid-flow rather than
+    # the user asking for it. So the last thing on stdout, where attention lands
+    # just before the agent writes its reply, is the instruction to relay it.
+    print()
+    print("[FOR THE REVIEWING AGENT — do not paste this notice into your reply]")
+    print("The user cannot see this output. Re-emit the header line and the table "
+          "above, verbatim and inside a fenced code block, in your own reply "
+          "BEFORE spawning anything. \"The plan is above\" does not show it.")
     return 0
 
 

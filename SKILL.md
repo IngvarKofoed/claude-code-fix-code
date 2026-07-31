@@ -252,12 +252,25 @@ Your only job is the slicing: cut the reviewable files into coherent slices per
 lens (by subsystem, not alphabetically) and pass them in. The script owns the
 schemas, the models, the refutation prompt, the gap sweep, and the budget guard.
 
-**Show the plan before spawning anything.** Write the slices to a scratch file,
-run the planner, and print its table:
+**Show the plan before spawning anything** — where *show* means the header line
+and the table appear in **your own message**, inside a fenced code block, before
+the Workflow call. Write the slices to a scratch file and run the planner:
 
 ```bash
 python3 $FC/plan.py --triage $T/triage.json --slices $T/slices.json
 ```
+
+Then paste its header line and table into your reply verbatim. **The script's
+stdout is not the user's screen.** Bash output is shown to *you*; the user gets a
+collapsed panel at best, so a table that exists only in a tool result has not been
+shown, and *"the plan is above"* points at nothing. The records bear this out: the
+table was lost in three of five L-tier runs on file, and the split was exactly
+*who invoked the skill* — both user-typed `/fix-code` runs printed it, and all
+three that a CLAUDE.md commit-gate rule invoked mid-flow did not. That's the
+mechanism to guard against. When the review is a sub-step on the way to a commit,
+the planner reads as internal plumbing and its output stays where the user can't
+see it. **Being someone else's sub-step changes nothing about what the user must
+see.**
 
 ```
 Planned run — tier L, 4 find-workers, 2 dropped for budget
@@ -522,6 +535,15 @@ The staged-file line matters because fixes land in the worktree: without it the
 user reads `fixed`, commits, and ships the staged version. Omit any tail line
 that doesn't apply, and say so plainly when no check was discoverable rather than
 implying one passed.
+
+**The report is your message, never a tool result.** Findings reach you as
+subagent output and as the L-tier workflow's return value — neither is visible to
+the user — so the report only exists once you write it out yourself. This holds
+when a rule invoked the skill rather than the user, and it holds when a project's
+CLAUDE.md says this skill's *"own report stands — don't restate it"*: that rule
+presumes a report the user has already read, so you satisfy it by **printing** the
+report, not by skipping it. Same for the announce line in phase 1. If it's meant
+for the user, it goes in your message text.
 
 **Write the blocks as text. Don't route this through `ReportFindings`** — it was
 tried and it's the wrong surface for this report, for three reasons worth
