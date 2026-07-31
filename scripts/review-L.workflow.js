@@ -88,7 +88,13 @@ function plan(slices) {
   return { run: slices.slice(0, n), dropped: slices.slice(n) }
 }
 
-const slices = args?.slices ?? []
+// `args` reaches a workflow verbatim, and some hosts deliver it JSON-ENCODED rather than
+// as a value — in which case `args.slices` is undefined and the run ends with zero agents
+// and an "empty review" that reads as "nothing found". Accept either form.
+const _args = typeof args === 'string'
+  ? (() => { try { return JSON.parse(args) } catch (_) { return {} } })()
+  : (args ?? {})
+const slices = _args?.slices ?? []
 if (!slices.length) return { error: 'no slices supplied', findings: [] }
 
 const { run, dropped } = plan(slices)
