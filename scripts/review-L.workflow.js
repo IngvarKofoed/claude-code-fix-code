@@ -36,6 +36,16 @@ const FINDINGS = {
           fix: { type: 'string' },
           side_effects: { type: 'string' },
           unambiguous: { type: 'boolean' },
+          // Required in practice whenever unambiguous is false: a finding left
+          // for the author has to arrive with its options named, or the report
+          // costs them a round trip to ask why it wasn't fixed.
+          alternatives: { type: 'array', items: { type: 'string' } },
+          recommended: { type: 'string' },
+          // How much work is left once the author picks: true means one question
+          // unblocks a small edit (the session asks), false means it's new design
+          // either way (leave it alone). Without this the session can't tell the
+          // two apart and defaults to leaving both.
+          small_edit_once_decided: { type: 'boolean' },
         },
       },
     },
@@ -111,8 +121,24 @@ const perSlice = await pipeline(
     `Files:\n${(s.files ?? []).join('\n')}\n\n` +
     `Review ONLY the changed lines in these files (plus callers the change broke). ` +
     `Return findings, each with a traced failure scenario, 1-5 severity by ` +
-    `consequence, every location the defect appears, and whether one obvious ` +
-    `local fix exists.`,
+    `consequence, every location the defect appears, and the fix.\n\n` +
+    `On "unambiguous": the question is the smallest edit that stops the traced ` +
+    `failure, NOT the best design for this code. Candidates that behave ` +
+    `identically on every input and differ only in HOW THEY ARE WRITTEN (where ` +
+    `the guard sits, early return vs. wrapped branch, which helper) are ONE fix ` +
+    `with several drafts — set it true and pick the draft matching the ` +
+    `surrounding code. Several files for one decision is still true. Set it false ` +
+    `only when the candidates BEHAVE differently and which behavior is right is ` +
+    `the author's call; then name them in "alternatives" and your pick in ` +
+    `"recommended".\n\n` +
+    `When unambiguous is false, also set "small_edit_once_decided": true if only ` +
+    `a small edit is left once the author picks a behavior (a different ` +
+    `comparison, one more branch, a changed default) — those get ONE question and ` +
+    `then get fixed. False if new design is left either way (a new abstraction, a ` +
+    `signature change, edits across subsystems) — getting an answer does not make ` +
+    `a big edit small, so those are left alone.\n\n` +
+    `Never lower severity because a finding has several candidate fixes. ` +
+    `Severity is consequence; alternatives are a property of the repair.`,
     { label: `find:${s.lens}/${s.label}`, phase: 'Find',
       // plan.py resolved this; the fallback keeps the same rule so the
       // pre-flight table can never disagree with what actually runs.
@@ -129,7 +155,11 @@ const perSlice = await pipeline(
       `asserting safety is not a mitigation; "the framework probably handles ` +
       `this" is not a mitigation. Killing a real finding with an imagined ` +
       `defense is as bad as inventing one. Judge the finding as written — a ` +
-      `different bug nearby does not make this one true.`,
+      `different bug nearby does not make this one true.\n\n` +
+      `If you set "unambiguous", apply the same behavioral test: false only when ` +
+      `the candidate fixes BEHAVE differently and the choice is the author's. ` +
+      `Fixes differing only in how they are written, or spanning several files ` +
+      `for one decision, are unambiguous. Do not fail a real fix on design taste.`,
       { label: `verify:${f.locations[0]?.file ?? s.label}`, phase: 'Verify',
         model: 'sonnet', schema: VERDICT }
     ).then((v) => ({ ...f, verdict: v }))

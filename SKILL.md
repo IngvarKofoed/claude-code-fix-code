@@ -371,15 +371,72 @@ Then rate on two independent axes. Collapsing them is the tempting mistake —
 No *class* of finding gets a fixed rating — a broken caller is a 5 when it
 dereferences null on a normal path and a 3 when it only breaks an error path.
 
-**Fixability** — exactly one sensible way to write it, and local? A wrong
+**Fixability** — is there exactly one sensible way to write the repair? A wrong
 comparison, a missing guard, an unhandled branch, a caller not updated for a new
-signature: yes. Needs a design decision, has two defensible fixes, spreads across
-files, or changes an interface: no.
+signature: yes.
+
+The question is about the **repair**, not the design. The candidate fix is the
+smallest edit that makes the traced failure stop happening — not the best way
+this code could have been written. Asked how a piece of code *should* be
+structured you can always name three defensible answers, so a reviewer who
+slides from *what stops this failure* to *what would be right here* fails this
+gate on everything, and serious defects walk out under a gate built for design
+decisions. That has happened on a real run — a confirmed finding left unfixed
+with "three defensible fixes, none clean" — which is why the test below asks what
+the candidates would *do*, not how they'd look:
+
+- **The same behavior written differently is not a real choice.** If the
+  candidates produce identical results on every input and differ only in where the
+  guard sits, early return versus wrapped branch, or which existing helper does
+  the work — pick the one that matches the surrounding code and fix it. Those are
+  drafts of one repair, not competing repairs. Count decisions, not drafts.
+- **A real choice is when the program would behave differently and the user would
+  have an opinion about which is right.** Clamp vs. reject vs. wrap; drop-and-log
+  vs. dead-letter; retry vs. fail fast. What to do with one of these is in
+  **Together** below — sometimes you ask, sometimes you leave it.
+- **Intent settles most of the rest.** If phase 2 established which behavior was
+  wanted, the choice isn't open — it was made before you got here, and the fix is
+  unambiguous.
+
+Also genuinely ambiguous: needs a design decision, or changes an interface, or
+needs a separate judgment per site. **Not** ambiguous: touching several files for
+one decision — six call sites for one changed signature is one idea applied six
+times.
+
+**Three candidate fixes is a signal about the finding, not just the gate.** A
+defect you've actually localized admits one minimal repair plus cosmetic variants
+of it. Three genuinely different *behaviors* means one of three things, and they
+have different answers: a design disagreement wearing a severity number (drop
+it); a defect not localized yet (re-read, then rate); or a real defect that leaves
+the user a genuine choice (ask — below). **Never drop a confirmed ≥3 on the ground
+that it had three fixes.** The alternatives are a property of the repair, the
+severity is a property of the consequence, and generating options can't lower one
+by way of the other.
 
 **Together:**
 
 - **≥3 and unambiguous** → fix-eligible (`fixed` under `--fix`, else `would fix`).
-- **≥3 but ambiguous** → leave it, and name the choice in the line.
+- **≥3 with a real choice in it** → two possible answers, and **the choice merely
+  existing doesn't pick between them. What picks is how much work is left once the
+  user decides.** Take each candidate in turn and ask what you'd actually write:
+
+  - **A small edit is left → ask.** A different comparison, a different branch, one
+    more call, a changed default. What's blocking you isn't the code, it's one fact
+    the user has and you don't. Under `--fix`, put it to them (phase 5); in the
+    default mode report it ❔ with the options named, since nothing is being applied
+    and a question with no product is just an interruption.
+  - **New design is left → leave it alone.** A new abstraction, a signature change,
+    a state machine that didn't exist, edits spreading across subsystems. Asking
+    buys nothing here: even with the answer you'd be writing new design into work
+    the user is about to commit, and they'd have to read every line of it anyway.
+    Getting an answer doesn't make a big edit small.
+
+  Either way, **put the choice in the block**: name the options in a few words
+  each, say what the decision turns on, and name the one you'd pick. Recommending
+  isn't deciding; it's the cheapest path to the user's decision, and it lets them
+  answer in a word. A block that says only *"ambiguous — your call"* sends them
+  back to ask why it wasn't fixed, which is the round trip this branch exists to
+  avoid, paid anyway.
 - **2** → your judgment, and it stays a judgment. A one-token correction in a
   file already being repaired is usually worth taking; the same finding needing
   its own hunk in an untouched file usually isn't. Weigh that **an edit is not
@@ -395,6 +452,43 @@ If the list is mostly 1s and 2s, the bar slipped upstream — drop them rather t
 rating them.
 
 ## 5. Apply — `--fix` only
+
+### Ask first — one question, before anything is applied
+
+Findings where a real choice is the only thing standing between you and a small
+edit get one `AskUserQuestion`. Every rule here exists to keep it **one**:
+
+- **One call per run, covering every open choice**, worst first, up to four. A
+  prompt per finding turns a review into an interview. Past four, ask about the
+  worst four and leave the rest with their options named.
+- **Before the restore point and before the first edit.** Never hold a
+  half-mutated tree open across a question. Ask, collect the answers, *then*
+  snapshot and apply everything — unambiguous fixes and chosen ones together,
+  worst-first, in one pass.
+- **The options are behaviors, not diffs.** Two to three, each labelled in a few
+  words and described by its consequence — *"dead-letter: nothing is lost, the
+  queue can grow"*. Put the one you'd pick first and mark it recommended, so the
+  cheapest answer is also the default.
+- **The answer authorizes the behavior, not the edit.** A chosen fix still needs
+  the independent verifier from phase 4: the user picked dead-letter, they did not
+  certify that your dead-letter edit is correct and side-effect-free. Ask, verify
+  the chosen fix, then apply. A refuted one is `left`, and the report says the
+  choice couldn't be implemented safely rather than silently dropping a question
+  the user just answered.
+- **If nobody can answer, degrade — never block.** This skill is built to be
+  invoked by a rule mid-flow, and headless, cron and commit-gate runs have no one
+  at the keyboard. If asking isn't available, or the user declines or picks
+  something you can't write as a small edit, the finding is `left` with its options
+  named. A review that hangs waiting for input it cannot get is worse than one
+  that reports a decision it didn't make.
+
+This is the one question the skill asks, and it isn't the kind phase 1 forbids.
+*Announce, don't ask* governs **permission** — being invoked is permission to do
+the work. Asking which behavior the user wants isn't asking permission, it's
+asking for **a fact the code can't supply**, and there's nowhere to get it but
+from them. Guessing is the failure this replaces.
+
+### Then apply
 
 Take the restore point **before the first edit**, naming every file you're about
 to touch:
@@ -465,21 +559,28 @@ finding count. If a risk signal escalated the tier, it's already in there.
   read, and three red discs is a different morning than three white ones.
 - **severity** — the digit in brackets, `[1]`-`[5]`.
 - **state** — a single glyph, so it can't push the titles out of line:
-  ✅ repaired · 🔧 would repair, under `--fix` · ➖ left alone.
+  ✅ repaired · 🔧 would repair, under `--fix` · ❔ needs one decision from you ·
+  ➖ left alone.
   A glyph rather than a padded word because every alignment bug in this format's
   history came from a variable-width field that had to be measured against its
   neighbours — one character can't drift. Note 🔧 is deliberately *not* a
   green check: in the default mode nothing has been repaired, and a check mark
-  there would read as "done" for work that hasn't happened. And none of the three
-  reuses the severity palette's colours, so a state glyph is never mistaken for a
-  disc.
+  there would read as "done" for work that hasn't happened. ❔ is an outline rather
+  than a filled disc, so it can't be misread as a severity colour, and it says
+  *open* where 🔧 says *queued*. None of the four reuses the severity palette's
+  colours, so a state glyph is never mistaken for a disc.
+  **❔ only survives to the report in the default mode.** Under `--fix` the
+  question has been asked by the time you write the report, so every ❔ has
+  resolved: ✅ with the chosen behavior named in the description, or ➖ if the
+  answer couldn't be implemented safely or nobody answered.
 - **title** — a compressed label for the defect, ~50 characters, no trailing
   period. It names the thing; it doesn't explain it.
 - **description** — one or two lines, indented two spaces. This is the
   **failure**, concretely: what goes wrong, on what input, with what
   consequence. Not a re-explanation of the code — the user wrote it. For a
-  `left` finding this is also where the choice goes, since that's what makes it
-  actionable.
+  `left` finding this is also where the choice goes — the options, what the
+  decision turns on, and the one you'd pick — since that's what makes it
+  actionable in a word rather than a round trip.
 - **File(s)** — every location where *this* defect is present, each with a line
   number. Always present, always a list, even for a single file: a predictable
   shape is worth more than a saved line, and mixed forms are how formats drift.
@@ -499,10 +600,11 @@ Reviewed 7 files, 240 reviewable lines (working-tree) · tier M · 3 findings
   File(s):
   - src/auth/session.ts:88
 
-🟠 [4] ➖ Retry drops the item when the handler throws
+🟠 [4] ❔ Retry drops the item when the handler throws
   On a thrown handler the item is consumed and never re-queued, so a transient
-  failure silently loses work. Two valid fixes — drop-and-log, or dead-letter —
-  and which is right depends on whether loss is acceptable here. Your call.
+  failure silently loses work. Re-queue with a retry cap, or route to the existing
+  dead-letter table — turns on whether loss or ordering matters more here. I'd
+  dead-letter; two lines either way once you've picked.
   File(s):
   - src/sync/queue.ts:31
 
@@ -513,7 +615,8 @@ Reviewed 7 files, 240 reviewable lines (working-tree) · tier M · 3 findings
   - src/api/user.ts:12
   - src/worker/batch.ts:57
 
-Nothing changed. 2 of 3 are fix-eligible — /fix-code --fix applies them.
+Nothing changed. 2 of 3 are fix-eligible, 1 needs a decision — /fix-code --fix
+applies the two and asks about the third.
 ```
 
 **A finding may span several files, but only when it is genuinely one defect.**
