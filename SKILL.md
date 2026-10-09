@@ -33,7 +33,12 @@ dry run that shows whether the fix threshold is set right.
 **`--fix`: apply the repairs that clear both gates.** Same review, same rigor —
 the only difference is the last step.
 
-`--undo` reverts the most recent `--fix` run: `python3 ~/.claude/skills/fix-code/scripts/snapshot.py undo`.
+The bundled scripts live in `scripts/` under this skill's base directory, the path
+shown when the skill loads. Every command below refers to that folder as `$FC`; set
+it from the base directory rather than assuming `~/.claude/skills/fix-code`, since
+the skill may be installed under another folder name or as a project skill.
+
+`--undo` reverts the most recent `--fix` run: `python3 $FC/snapshot.py undo`.
 
 The rigor doesn't change between modes, because a `would fix` mark is a claim
 about what `--fix` would do. An unverified version of that claim is worse than
@@ -45,7 +50,7 @@ Run the bundled script. Don't re-derive any of this by reading the diff — the
 announced tier has to be reproducible or the user can't sanity-check it.
 
 ```bash
-FC=~/.claude/skills/fix-code/scripts
+FC="<skill base directory>/scripts"
 python3 $FC/triage.py                        # auto
 python3 $FC/triage.py --range HEAD~3..HEAD   # explicit range
 python3 $FC/triage.py --branch               # force branch mode
@@ -243,7 +248,7 @@ run the **bundled script** rather than writing one:
 
 ```
 Workflow({
-  scriptPath: "/Users/ingvar/.claude/skills/fix-code/scripts/review-L.workflow.js",
+  scriptPath: "<skill base directory>/scripts/review-L.workflow.js",
   args: { slices: [ { lens: "correctness", label: "worldgen", files: [...] }, ... ] }
 })
 ```
@@ -494,7 +499,7 @@ Take the restore point **before the first edit**, naming every file you're about
 to touch:
 
 ```bash
-python3 ~/.claude/skills/fix-code/scripts/snapshot.py create <file> [<file>...]
+python3 $FC/snapshot.py create <file> [<file>...]
 ```
 
 Never hand-roll this. `git stash create` + `git checkout <sha> -- .` looks
